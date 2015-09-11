@@ -38,7 +38,7 @@ def worker_routine(exp_script):
         socket.send(b"READY")
         request = socket.recv()
         subprocess.call(["python", exp_script, request],
-            stdin=open(os.devnull, 'r'), stdout=open("out", 'w'), stderr=open("err", 'w'))
+            stdin=open(os.devnull, 'r'), stdout=open(request + "/out", 'w'), stderr=open(request + "/err", 'w'))
         # subprocess.call(["python", exp_script, request])
 
 def broker_routine():
