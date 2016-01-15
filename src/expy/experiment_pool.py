@@ -74,6 +74,8 @@ def get_progress(exp_params, root_path, job_queue, nb_trials=100):
             exp_trial_directory = exp_directory + "/{}".format(i)
             if job_queue.is_done(exp_trial_directory):
                 nb_finished += 1
+            # else:
+            #     print exp_trial_directory
     else:
         nb_finished = nb_trials
 

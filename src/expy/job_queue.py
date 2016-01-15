@@ -3,9 +3,8 @@ import json
 import zmq
 import threading
 import subprocess
-import time
-import subprocess
 from expy.ssh import SSHSession
+
 
 class JobQueue:
     def __init__(self):
@@ -27,6 +26,7 @@ class JobQueue:
 BROCKER_BACKEND = "ipc://brocker_backend.ipc"
 BROCKER_FRONTEND = "ipc://brocker_frontend.ipc"
 
+
 def worker_routine(exp_script):
     """Worker routine"""
     context = zmq.Context.instance()
@@ -37,9 +37,10 @@ def worker_routine(exp_script):
     while True:
         socket.send(b"READY")
         request = socket.recv()
-        subprocess.call(["python", exp_script, request],
-            stdin=open(os.devnull, 'r'), stdout=open(request + "/out", 'w'), stderr=open(request + "/err", 'w'))
+        subprocess.call(["python", exp_script, request], stdin=open(os.devnull, 'r'),
+                        stdout=open(request + "/out", 'w'), stderr=open(request + "/err", 'w'))
         # subprocess.call(["python", exp_script, request])
+
 
 def broker_routine():
     context = zmq.Context.instance()
@@ -100,7 +101,7 @@ class LocalJobQueue(JobQueue):
 
     def add_job(self, directory):
         self._socket.send(directory)
-        
+
     def is_launched(self, directory):
         return self.is_done(directory)
 
@@ -112,14 +113,15 @@ class LocalJobQueue(JobQueue):
             results = json.load(results_file)
         return results
 
+
 class RetrieveJobQueue(JobQueue):
     def __init__(self):
         pass
-        
+
     def add_job(self, directory):
         print "RetrieveJobQueue cannot add job."
         assert False
-        
+
     def is_launched(self, directory):
         return self.is_done(directory)
 
@@ -138,7 +140,7 @@ class InteractiveJobQueue(JobQueue):
 
     def add_job(self, directory):
         subprocess.call(["python {} {}".format(self.exp_script, directory)], shell=True)
-        
+
     def is_launched(self, directory):
         return self.is_done(directory)
 
@@ -152,12 +154,14 @@ class InteractiveJobQueue(JobQueue):
 
 
 class AvakasJobQueue(JobQueue):
-    def __init__(self, exp_script, max_time="2:00:00"):
+    def __init__(self, exp_script, root, max_time="2:00:00"):
         with open(os.path.dirname(__file__) + "/config.json") as config_file:
             config = json.load(config_file)
-        self._session = SSHSession("avakas.mcia.univ-bordeaux.fr", config["user"], key_file=open(config["key_path"], "r"))
+        self._session = SSHSession("avakas.mcia.univ-bordeaux.fr", config["user"],
+                                   key_file=open(config["key_path"], "r"))
         self._session.command("module load torque")
         self.exp_script = exp_script
+        self.root = root
         self.advise_sleep = 60
         if isinstance(max_time, str):
             self.max_time = max_time
@@ -170,29 +174,29 @@ class AvakasJobQueue(JobQueue):
         # print "add_job : ", directory
         with open(directory + "/job.pbs", "w") as job_file:
             job_file.write("\
-#PBS -o Repos/Inria/thibaut/{0}/out\n\
-#PBS -e Repos/Inria/thibaut/{0}/err\n\
+#PBS -o Repos/{4}/{0}/out\n\
+#PBS -e Repos/{4}/{0}/err\n\
 #PBS -l walltime={1}\n\
 #PBS -l nodes=1:ppn=2\n\
 #PBS -N {2}\n\
 \n\
 printf \"/tmp/$PBS_JOBID\" > Repos/Inria/thibaut/{0}/tmp_dir_name\n\
 source virtualenvs/py2.7/bin/activate;\n\
-cd Repos/Inria/thibaut/;\n\
+cd Repos/{4}/;\n\
 python {3} {0};\n\
 sleep 1;\n\
-touch {0}/finished\n".format(directory, self.max_time, directory[:-10], self.exp_script))
+touch {0}/finished\n".format(directory, self.max_time, directory[:-10], self.exp_script, self.root))
 
-        self._session.create_path("Repos/Inria/thibaut/{}".format(directory))
+        self._session.create_path("{}/{}".format(self.root, directory))
         self._session.put("{}/params.json".format(directory),
-            "Repos/Inria/thibaut/{}/params.json".format(directory))
+                          "{}/{}/params.json".format(self.root, directory))
         self._session.put("{}/job.pbs".format(directory),
-            "Repos/Inria/thibaut/{}/job.pbs".format(directory))
+                          "{}/{}/job.pbs".format(self.root, directory))
 
-        self._session.command("qsub Repos/Inria/thibaut/{}/job.pbs".format(directory))
+        self._session.command("qsub {}/{}/job.pbs".format(self.root, directory))
 
     def is_launched(self, directory):
-        return self._session.path_exists("Repos/Inria/thibaut/{}".format(directory))
+        return self._session.path_exists("{}/{}".format(self.root, directory))
 
     def is_done(self, directory):
         # print
@@ -201,14 +205,14 @@ touch {0}/finished\n".format(directory, self.max_time, directory[:-10], self.exp
             return True
         # elif not self._session.is_dir("Repos/Inria/thibaut/{}".format(directory)):
         #     return False
-        elif not self._session.path_exists("Repos/Inria/thibaut/{}/finished".format(directory)):
+        elif not self._session.path_exists("{}/{}/finished".format(self.root, directory)):
             # print "not done :", directory
             # self._session.command("qsub Repos/Inria/thibaut/{}/job.pbs".format(directory))
             return False
         else:
-            if self._session.path_exists("Repos/Inria/thibaut/{}/results.json".format(directory)):
-                self._session.get("Repos/Inria/thibaut/{}/results.json".format(directory),
-                    "{}/results.json".format(directory))
+            if self._session.path_exists("{}/{}/results.json".format(self.root, directory)):
+                self._session.get("{}/{}/results.json".format(self.root, directory),
+                                  "{}/results.json".format(directory))
                 return True
             else:
                 print "relaunch : ", directory
@@ -223,4 +227,3 @@ touch {0}/finished\n".format(directory, self.max_time, directory[:-10], self.exp
         with open(directory + "/results.json", "r") as results_file:
             results = json.load(results_file)
         return results
-
