@@ -3,12 +3,12 @@
 import paramiko
 import errno
 import socket
-import os
+
 
 class SSHSession(object):
     def __init__(self, hostname, username, key_file):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect((hostname,22))
+        self.sock.connect((hostname, 22))
         self.transport = paramiko.Transport(self.sock)
         self.transport.start_client()
 
@@ -35,11 +35,11 @@ class SSHSession(object):
         session.exec_command("mkdir -p {}".format(path))
         return not session.recv_exit_status()
 
-    def command(self,cmd):
+    def command(self, cmd):
         self.chan.sendall(cmd + '\n')
 
-    def put(self,localfile,remotefile):
-        self.sftp.put(localfile,remotefile)
-    
-    def get(self,remotefile,localfile):
-        self.sftp.get(remotefile,localfile)
+    def put(self, localfile, remotefile):
+        self.sftp.put(localfile, remotefile)
+
+    def get(self, remotefile, localfile):
+        self.sftp.get(remotefile, localfile)
